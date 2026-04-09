@@ -1,0 +1,8 @@
+---
+
+galaxy_info:
+  author: "Paul Armstrong (github:@parmstro)"
+  description: "Configure a kvm host for use as a compute resource"
+  standalone: false
+
+...

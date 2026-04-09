@@ -1,0 +1,60 @@
+---
+
+# configure sasl and kvm
+
+# unfortunately, right now we can't get satellite to pick up the keytab
+# for it to kinit
+# fine on this end.
+- name: Configure Libvirt to allow TLS and SASL
+  ansible.builtin.lineinfile:
+    path: /etc/libvirt/libvirtd.conf
+    regexp: "{{ item.regexp }}"
+    line: "{{ item.line }}"
+    state: present
+  loop:
+    - { regexp: '^#?listen_tls', line: 'listen_tls = 1' }
+    - { regexp: '^#?listen_tcp', line: 'listen_tcp = 0' }
+#    - { regexp: '^#?auth_tls', line: 'auth_tls = "sasl"' }
+
+- name: Configure SASL for Libvirt (GSSAPI)
+  ansible.builtin.copy:
+    dest: /etc/sasl2/libvirt.conf
+    content: |
+      mech_list: gssapi
+      keytab: {{ service_keytab }}
+      # Limit access to specific kerberos principals if desired:
+      # sasldb_path: /etc/libvirt/passwd.db
+    owner: root
+    group: root
+    mode: '0644'
+
+- name: "Ensure system services are restarted"
+  ansible.builtin.systemd_service:
+    name: "{{ virtualization_service }}"
+    enabled: true
+    state: restarted
+  loop:
+    - virtqemud.socket
+    - virtqemud-ro.socket
+    - virtqemud-admin.socket
+    - virtnetworkd.socket
+    - virtnetworkd-ro.socket
+    - virtnetworkd-admin.socket
+    - virtnodedevd.socket
+    - virtnodedevd-ro.socket
+    - virtnodedevd-admin.socket
+    - virtnwfilterd.socket
+    - virtnwfilterd-ro.socket
+    - virtnwfilterd-admin.socket
+    - virtsecretd.socket
+    - virtsecretd-ro.socket
+    - virtsecretd-admin.socket
+    - virtstoraged.socket
+    - virtstoraged-ro.socket
+    - virtstoraged-admin.socket
+    - libvirtd.socket
+    - libvirtd-tls.socket
+  loop_control:
+    loop_var: virtualization_service
+
+...

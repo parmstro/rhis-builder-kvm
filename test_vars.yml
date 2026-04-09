@@ -1,0 +1,48 @@
+---
+
+async_timeout: 14400 # noqa: var-naming[no-role-prefix]
+async_delay: 15      # noqa: var-naming[no-role-prefix]
+
+keytab_retrieval_password: "{{ ipa_admin_password_vault }}" # noqa: var-naming[no-role-prefix]
+keytab_retrieval_dn: "{{ ipa_keytab_dn_vault }}" # noqa: var-naming[no-role-prefix]
+ipa_admin_principal: "{{ ipa_admin_principal_vault }}" # noqa: var-naming[no-role-prefix]
+ipa_admin_password: "{{ ipa_admin_password_vault }}" # noqa: var-naming[no-role-prefix]
+
+host_ssl_certs_dir: "/etc/ipa/private/{{ ansible_fqdn }}/" # noqa: var-naming[no-role-prefix]
+host_ssl_rsa_key_pass: "{{ host_ssl_rsa_key_pass_vault }}" # noqa: var-naming[no-role-prefix]
+host_ssl_crt_path: "{{ host_ssl_certs_dir }}{{ ansible_fqdn }}.crt" # noqa: var-naming[no-role-prefix]
+host_ssl_key_path: "{{ host_ssl_certs_dir }}{{ ansible_fqdn }}.key" # noqa: var-naming[no-role-prefix]
+host_ssl_csr_path: "{{ host_ssl_certs_dir }}{{ ansible_fqdn }}.csr" # noqa: var-naming[no-role-prefix]
+host_ssl_ca_crt_path: "{{ ipa_server_ca_crt_path }}" # noqa: var-naming[no-role-prefix]
+ipa_server_ca_crt_path: "/etc/ipa/ca.crt" # noqa: var-naming[no-role-prefix]
+
+crt_service_type: "HTTP" # noqa: var-naming[no-role-prefix]
+crt_force_regen: true # noqa: var-naming[no-role-prefix]
+service_keytab: "/etc/{{ crt_service_type }}/krb5.keytab"
+
+passfile: "{{ host_ssl_certs_dir }}passfile" # noqa: var-naming[no-role-prefix]
+ssl_private_key_cipher: "aes256" # noqa: var-naming[no-role-prefix]
+ssl_private_key_size: 4096 # noqa: var-naming[no-role-prefix]
+ssl_private_key_pem_path: "{{ host_ssl_certs_dir }}{{ ansible_fqdn }}.pem" # noqa: var-naming[no-role-prefix]
+ssl_public_key_path: "{{ host_ssl_certs_dir }}{{ ansible_fqdn }}.pub" # noqa: var-naming[no-role-prefix]
+ssl_public_key_format: "PEM" # noqa: var-naming[no-role-prefix]
+
+libvirt_client_private_key_pem_path: "{{ host_ssl_certs_dir }}{{ ansible_fqdn }}.libvirt.client.pem" # noqa: var-naming[no-role-prefix]
+libvirt_client_key_path: "{{ host_ssl_certs_dir }}{{ ansible_fqdn }}.libvirt.client.key" # noqa: var-naming[no-role-prefix]
+libvirt_client_csr_path: "{{ host_ssl_certs_dir }}{{ ansible_fqdn }}.libvirt.client.csr" # noqa: var-naming[no-role-prefix]
+libvirt_client_crt_path: "{{ host_ssl_certs_dir }}{{ ansible_fqdn }}.libvirt.client.crt" # noqa: var-naming[no-role-prefix]
+libvirt_client_crt_service_type: "libvirtclient" # noqa: var-naming[no-role-prefix]
+
+libvirt_server_private_key_pem_path: "{{ host_ssl_certs_dir }}{{ ansible_fqdn }}.libvirt.server.pem" # noqa: var-naming[no-role-prefix]
+libvirt_server_key_path: "{{ host_ssl_certs_dir }}{{ ansible_fqdn }}.libvirt.server.key" # noqa: var-naming[no-role-prefix]
+libvirt_server_csr_path: "{{ host_ssl_certs_dir }}{{ ansible_fqdn }}.libvirt.server.csr" # noqa: var-naming[no-role-prefix]
+libvirt_server_crt_path: "{{ host_ssl_certs_dir }}{{ ansible_fqdn }}.libvirt.server.crt" # noqa: var-naming[no-role-prefix]
+libvirt_server_crt_service_type: "libvirt" # noqa: var-naming[no-role-prefix]
+
+csr_digest: "aes256" # noqa: var-naming[no-role-prefix]
+csr_organization_name: "{{ ansible_domain | upper }}" # noqa: var-naming[no-role-prefix]
+csr_organization_unit_name: "Demo Lab" # noqa: var-naming[no-role-prefix]
+csr_locality_name: "Hespeler" # noqa: var-naming[no-role-prefix]
+csr_state_or_province_name: "ON" # noqa: var-naming[no-role-prefix]
+csr_country_name: "CA" # noqa: var-naming[no-role-prefix]
+csr_email_address: "admin@{{ ansible_domain }}" # noqa: var-naming[no-role-prefix]

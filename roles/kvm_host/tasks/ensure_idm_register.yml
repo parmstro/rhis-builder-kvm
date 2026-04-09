@@ -1,0 +1,8 @@
+---
+
+# role will install client
+- name: "Ensure the client configuration"
+  ansible.builtin.include_role:
+    name: "redhat.rhel_idm.ipaclient"
+
+...

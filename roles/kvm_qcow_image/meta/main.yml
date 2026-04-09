@@ -1,0 +1,8 @@
+---
+
+galaxy_info:
+  author: "Paul Armstrong (github:@parmstro)"
+  description: "Install a qcow image on kvm server"
+  standalone: false
+
+...

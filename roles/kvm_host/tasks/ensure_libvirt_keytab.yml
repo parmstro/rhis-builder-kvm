@@ -1,0 +1,36 @@
+---
+
+# retrieve the necessary keytab
+
+- name: "Fetch existing keytab to server" # noqa: no-changed-when
+  ansible.builtin.command:
+    cmd: "ipa-getkeytab -p {{ crt_service_type }}/{{ ansible_fqdn }} -s {{ ipaserver_fqdn }} -k /root/{{ crt_service_type }}.keytab" # noqa: yaml[line-length]
+  register: gfhk_getkeytab
+  changed_when: gfhk_getkeytab.rc == 0
+  no_log: false
+
+# system_u:object_r:virt_etc_t:s0
+- name: "Create target directory"
+  ansible.builtin.file:
+    path: "/etc/{{ crt_service_type }}/"
+    state: "directory"
+    owner: "root"
+    group: "root"
+    mode: "0600"
+    seuser: "system_u"
+    serole: "object_r"
+    setype: "virt_etc_t"
+    selevel: "s0"
+
+- name: "Move keytab to target directory"
+  ansible.builtin.copy:
+    src: "/root/{{ crt_service_type }}.keytab"
+    dest: "{{ service_keytab }}"
+    remote_src: true
+    owner: root
+    group: root
+    mode: "0755"
+    seuser: "system_u"
+    serole: "object_r"
+    setype: "virtd_keytab_t"
+    selevel: "s0"

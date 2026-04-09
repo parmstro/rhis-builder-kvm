@@ -1,0 +1,8 @@
+---
+
+kvm_hosts:
+  hosts:
+    kvm1.example.ca:
+    kvm2.example.ca:
+
+...

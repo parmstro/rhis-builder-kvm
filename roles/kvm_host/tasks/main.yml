@@ -1,0 +1,26 @@
+---
+
+# This role is applied to a single host during post provisioning
+
+- name: "Validate the kvm prerequisites"
+  ansible.builtin.include_tasks: "ensure_kvm_host_prerequisites.yml"
+
+- name: "Validate the kvm prerequisites"
+  ansible.builtin.include_tasks: "ensure_idm_register.yml"
+
+- name: "Ensure libvirt realm integration"
+  ansible.builtin.include_tasks: "ensure_libvirt_server_cert.yml"
+
+- name: "Ensure libvirt realm integration"
+  ansible.builtin.include_tasks: "ensure_libvirt_client_cert.yml"
+
+- name: "Ensure libvirt realm integration"
+  ansible.builtin.include_tasks: "ensure_libvirt_cert_files.yml"
+
+- name: "Ensure libvirt realm integration"
+  ansible.builtin.include_tasks: "ensure_libvirt_keytab.yml"
+
+- name: "Configure libvirt connection"
+  ansible.builtin.include_tasks: "ensure_libvirt_config.yml"
+
+...

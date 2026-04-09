@@ -1,0 +1,8 @@
+---
+
+galaxy_info:
+  author: "Paul Armstrong (github:@parmstro)"
+  description: "Configure the satellite compute resource for a kcm host"
+  standalone: false
+
+...
