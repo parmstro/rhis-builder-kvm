@@ -34,6 +34,10 @@
     src: /proc/cmdline
   register: file_content
 
+- name: "Set default state"
+  ansible.builtin.set_fact:
+    iommu_on: false
+
 - name: "Determine if iommu is on"
   when: "'intel_iommu=on' in (file_content.content | b64decode)"
   ansible.builtin.set_fact:

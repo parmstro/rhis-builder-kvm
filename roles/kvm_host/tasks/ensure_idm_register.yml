@@ -1,7 +1,40 @@
 ---
 
 # role will install client
+- name: "Set the state"
+  ansible.builtin.set_fact:
+    kvm_idm_registered: false
+
+- name: "Determine of the system is already registered"
+  ansible.builtin.command: "which realm"
+  register: which_result
+  changed_when: true
+
+- name: "Determine if realm exists"
+  when: which_result.rc == 0
+  block:
+    - name: "Get the realm information"
+      ansible.builtin.command: "realm list"
+      register: realm_data
+      changed_when: realm_data.rc == 0
+
+    - name: "Ensure that system belongs to our realm"
+      ansible.builtin.assert:
+        that:
+          - "_global_domain_name in realm_data.stdout_lines[0]"
+          - "(_global_domain_name | upper) in realm_data.stdout_lines[2]"
+          - "'ipa' in realm_data.stdout_lines[5]"
+
+    - name: "The client is in out realm"
+      ansible.builtin.set_fact:
+        kvm_idm_registered: true
+
+    - name: "Log realm data"
+      ansible.builtin.debug:
+        var: realm_data
+
 - name: "Ensure the client configuration"
+  when: not kvm_idm_registered
   ansible.builtin.include_role:
     name: "redhat.rhel_idm.ipaclient"
 

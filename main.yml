@@ -1,0 +1,58 @@
+---
+# This is the main rhis-builder-satellite entry point.
+# This play is expected to be run from inside the rhis-provisioner container.
+# If running independently, please ensure that all requirements and prerequisites for executing the play are met.
+
+- name: "Build the kvm hypervisor hosts"
+  hosts: kvm_hypervisors
+  become: true
+  gather_facts: true
+
+  tasks:
+
+    - name: "Load the vault variables"
+      when: vault_path is defined
+      ansible.builtin.include_vars:
+        file: "{{ vault_path }}"
+      tags:
+        - always
+
+    - name: "Load the other variables"
+      when: vars_path is defined
+      ansible.builtin.include_vars:
+        file: "{{ vars_path }}"
+      tags:
+        - always
+
+    - name: "Load the vault variables"
+      when: vault_dir is defined
+      ansible.builtin.include_vars:
+        dir: "{{ vault_dir }}"
+      tags:
+        - always
+
+    - name: "Load the other variables"
+      when: vars_dir is defined
+      ansible.builtin.include_vars:
+        dir: "{{ vars_dir }}"
+      tags:
+        - always
+
+    - name: "Apply role of kvm_host to {{ ansible_fqdn }}"
+      ansible.builtin.include_role:
+        name: kvm_host
+
+    # - name: "Apply role of kvm_storage to {{ ansible_fqdn }}"
+    #   when: kvm_storage is defined and (kvm_storage | length) > 0
+    #   ansible.builtin.include_role:
+    #     name: kvm_storage
+
+    # - name: "Apply role of kvm_network to {{ ansible_fqdn }}"
+    #   when: kvm_networks is defined and (kvm_networks | length) > 0
+    #   ansible.builtin.include_role:
+    #     name: kvm_networks
+
+    # - name: "Apply role of kvm_images to {{ ansible_fqdn }}"
+    #   when: kvm_images is defined and (kvm_images | length) > 0
+    #   ansible.builtin.include_role:
+    #     name: kvm_images
