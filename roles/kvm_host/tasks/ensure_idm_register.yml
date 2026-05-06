@@ -18,14 +18,18 @@
       register: realm_data
       changed_when: realm_data.rc == 0
 
-    - name: "Ensure that system belongs to our realm"
+    - name: "Determine if the system belongs to our realm"
+      when: realm_data.stdout != ""
       ansible.builtin.assert:
         that:
           - "_global_domain_name in realm_data.stdout_lines[0]"
           - "(_global_domain_name | upper) in realm_data.stdout_lines[2]"
           - "'ipa' in realm_data.stdout_lines[5]"
+      register: assertion_state
 
-    - name: "The client is in out realm"
+    - name: "The client is in our realm"
+      when:
+        - realm_data.stdout != ""
       ansible.builtin.set_fact:
         kvm_idm_registered: true
 
