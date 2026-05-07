@@ -1,6 +1,9 @@
 ---
 
 # apply prerequisites per documentation
+- name: "Failsafe remote hypervisor"
+  ansible.builtin.set_fact:
+    remote_hypervisor: false
 
 # We are patching to latest
 - name: "Ensure the system is up to date" # noqa package-latest
@@ -29,6 +32,20 @@
     - "libvirt-tls"
     - "libvirt"
 
+- name: Detect CPU Vendor
+  when: "'GenuineIntel' in ansible_processor"
+  ansible.builtin.set_fact:
+    local_cpu_type: "intel"
+
+- name: Detect CPU Vendor
+  when: "'AuthenticAMD' in ansible_processor"
+  ansible.builtin.set_fact:
+    local_cpu_type: "amd"
+
+- name: "Debug output"
+  ansible.builtin.debug:
+    var: local_cpu_type
+
 - name: "Determine the boot command line"
   ansible.builtin.slurp:
     src: /proc/cmdline
@@ -39,28 +56,65 @@
     iommu_on: false
 
 - name: "Determine if iommu is on"
-  when: "'intel_iommu=on' in (file_content.content | b64decode)"
+  when: "'iommu=on' in (file_content.content | b64decode)"
   ansible.builtin.set_fact:
     iommu_on: true
 
-- name: "Ensure intel_iommu=on in kernel cmdline arguments"
+- name: "Debug output"
   when: not iommu_on
-  ansible.builtin.command: "grubby --update-kernel=DEFAULT --args='intel_iommu=on'"
-  register: grubby_out
-  changed_when: grubby_out.rc == 0
+  ansible.builtin.debug:
+    msg: |
+      The processor type is: {{ local_cpu_type }}
+      The IO Memory Management Unit is not loaded.
+      KVM standards recommend that it is turned on for your hypervisor.
+      This is a kernel commandline setting
 
-- name: "Update GRUB"
-  when: not iommu_on
-  ansible.builtin.command: "grub2-mkconfig -o /boot/grub2/grub.cfg"
-  register: grub_out
-  changed_when: grub_out.rc == 0
+# 20260505 - This will cause a self inflicted gunshot wound if your provisioner is running on your kvm server
+- name: "Ensure we are only operating on remote hypervisors"
+  when: remote_hypervisor
+  block:
 
-- name: "Reboot and wait"
-  when: not iommu_on
-  ansible.builtin.reboot:
-    post_reboot_delay: 15
+    - name: "Ensure intel_iommu=on in kernel cmdline arguments"
+      when: not iommu_on
+      ansible.builtin.command: "grubby --update-kernel=DEFAULT --args='{{ local_cpu_type }}_iommu=on'"
+      register: grubby_out
+      changed_when: grubby_out.rc == 0
 
-- name: "Ensure system services are enabled and started"
+    - name: "Update GRUB"
+      when: not iommu_on
+      ansible.builtin.command: "grub2-mkconfig -o /boot/grub2/grub.cfg"
+      register: grub_out
+      changed_when: grub_out.rc == 0
+
+    - name: "Reboot and wait"
+      when: not iommu_on
+      ansible.builtin.reboot:
+        post_reboot_delay: 15
+
+- name: "Stop legacy services"
+  ansible.builtin.systemd_service:
+    name: "{{ virtualization_service }}"
+    state: stopped
+  loop:
+    - libvirtd.service
+    - libvirtd.socket
+    - libvirtd-ro.socket
+    - libvirtd-admin.socket
+  loop_control:
+    loop_var: virtualization_service
+
+- name: "Disable non-socket based services"
+  ansible.builtin.systemd_service:
+    name: "{{ virtualization_service }}"
+    enabled: false
+    state: stopped
+  loop:
+    - libvirtd.service
+    - libvirtd.socket
+  loop_control:
+    loop_var: virtualization_service
+
+- name: "Ensure socket based system services are enabled and started"
   ansible.builtin.systemd_service:
     name: "{{ virtualization_service }}"
     enabled: true

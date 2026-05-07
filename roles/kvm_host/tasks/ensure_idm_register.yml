@@ -25,7 +25,11 @@
           - "_global_domain_name in realm_data.stdout_lines[0]"
           - "(_global_domain_name | upper) in realm_data.stdout_lines[2]"
           - "'ipa' in realm_data.stdout_lines[5]"
-      register: assertion_state
+      # Currently, we will fail here if the hypervisor is not part of our realm
+      # TODO: implement a flag that allows us to force unregister the hypervisor
+      # and ensure that kvm_idm_registered is false so that we re-register to the
+      # proper realm
+      # optional cuz custy gonna do custy
 
     - name: "The client is in our realm"
       when:
