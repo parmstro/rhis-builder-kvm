@@ -1,0 +1,9 @@
+---
+
+
+- name: "Ensure the defined virt volumes exist"
+  when: kvm_virt_volumes is defined and (kvm_virt_volumes | length) > 0
+  ansible.builtin.include_tasks: "ensure_virt_volume.yml"
+  loop: "{{ kvm_virt_volumes }}"
+  loop_control:
+    loop_var: virt_volume

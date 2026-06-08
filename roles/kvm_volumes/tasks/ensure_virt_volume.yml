@@ -1,0 +1,26 @@
+---
+
+- name: "Ensure the state of volume: {{ virt_volume }}"
+  community.libvirt.virt_volume:
+    name: "{{ virt_volume.name | default(omit) }}"
+    pool: "{{ virt_volume.virt_pool }}"
+    clone_source: "{{ virt_volume.clone_source | default(omit) }}"
+    cloudinit_config: "{{ virt_volume.cloudinit_config | default(omit) }}"
+    command: "{{ virt_volume.command | default(omit) }}"    # mutually exclusice with state
+    state: "{{ virt_volume.state | default(omit) }}"        # mutually exclusive with command
+    uri: "{{ virt_volume.uri }}"
+    wipe: "{{ virt_volume.wipe | default(omit) }}"          # use with delete to wipe the volume first
+    xml: "{{ virt_volume.xml | default(omit) }}"
+
+# available commands
+#
+# "create"           - synonymous with state: present
+# "delete"           - synonymous with state: absent
+# "wipe"             - wipe only, no delete
+# "list_volumes"     - list the volumes in the specified pool
+# "get_xml"          - get canonical xml for the volume
+# "create_cidata_cdrom"  - creates a cloudinit cd-rom volume to enable bootstrapping cloudinit enabled vms
+
+# present - creates the volume from xml if it doesn't exist, xml must be provided, name must be specified in the xml for create
+#           if the xml size is larger than the existing size, the volume will be resized
+# absent  - deletes the volume specified by name, use wipe: true to wipe the volume before deleting.

@@ -1,0 +1,11 @@
+kvm_virt_pools:
+  - name: test_define
+    command: define
+    connection_uri: "qemu+tls://kvm1.flightpath.test/system"
+    xml: |
+      <pool type="dir">
+        <name>test_define</name>
+        <target>
+          <path>/var/lib/libvirt/images/custom_pool</path>
+        </target>
+      </pool>

@@ -1,0 +1,8 @@
+---
+
+galaxy_info:
+  author: "Paul Armstrong (github:@parmstro)"
+  description: "Create one or more networks on the kvm server"
+  standalone: false
+
+...

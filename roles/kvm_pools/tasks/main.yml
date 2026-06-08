@@ -1,0 +1,8 @@
+---
+
+- name: "Ensure the defined virt_pools exist"
+  when: kvm_virt_pools is defined and (kvm_virt_pools | length) > 0
+  ansible.builtin.include_tasks: "ensure_virt_pool.yml"
+  loop: "{{ kvm_virt_pools }}"
+  loop_control:
+    loop_var: virt_pool

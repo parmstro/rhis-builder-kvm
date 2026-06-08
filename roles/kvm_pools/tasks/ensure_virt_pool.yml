@@ -1,0 +1,45 @@
+---
+
+# Ensure virt pool state
+
+- name: "Ensure the state of virt_pool: {{ virt_pool.name }}"
+  community.libvirt.virt_pool:
+    name: "{{ virt_pool.name | default(omit) }}"
+    autostart: "{{ virt_pool.autostart | default(omit) }}"
+    command: "{{ virt_pool.command | default(omit) }}"
+    state: "{{ virt_pool.state | default(omit) }}"
+    uri: "{{ virt_pool.connection_uri }}"                    # e.g. qemu+tls://kvm1.example.ca/system
+    xml: "{{ virt_pool.xml | default(omit) }}"               # This must be an xml document value and not a file
+
+# Available Commands
+# "define"  - only creates the config file in /etc/libvirt/storage/ (persistent)
+# "build"   - creates the config and creates underlying objects, formats disks, creates lvm obects, etc.
+# "create"  - non-persistent! starts the pool and makes it available, does NOT persist the configuration. Pool definition lost if system or daemon is restarted
+# "start"   - starts an existing pool
+# "stop"    - stops an existing pool
+# "destroy" - stops and deactivates the pool - data is preserved - like turning off a computer. volumes are unmounted
+# "delete"  - deletes the actual data volumes - data is permanently deleted. BOOM
+# "undefine" - removes the confuguration file for the storage pool - underlying data is not affected e.g. file/logical volumes/etc..
+# "get_xml"  - retrieves the canonical xml of the pool
+# "list_pools" - lists pools for the uri
+# "facts"  - deep details on pool
+# "info"   - details on pool
+# "status"  - current state (active/inactive)
+# "refresh" - refresh cached info with current on disk data
+
+# Available states
+# "active"     - ensure an exsisting pool is active / online
+# "inactive"   - ensure an exsisting pool is inactive / offline
+# "present"    - ensure a pool exists and is active
+# "absent"     - ensure a pool does not exist and is inactive
+# "undefined"  - undefines pool
+# "deleted"    - deletes pool
+
+# Available modes for command build or or command delete
+# "new"
+# "repair"
+# "resize"
+# "no_overwrite"
+# "overwrite"
+# "normal"
+# "zeroed"

@@ -3,28 +3,28 @@
 # role will install client
 - name: "Set the state"
   ansible.builtin.set_fact:
-    kvm_idm_registered: false
+    kvm_host_idm_registered: false
 
 - name: "Determine of the system is already registered"
   ansible.builtin.command: "which realm"
-  register: which_result
+  register: kvm_host_which_result
   changed_when: true
 
 - name: "Determine if realm exists"
-  when: which_result.rc == 0
+  when: kvm_host_which_result.rc == 0
   block:
     - name: "Get the realm information"
       ansible.builtin.command: "realm list"
-      register: realm_data
-      changed_when: realm_data.rc == 0
+      register: kvm_host_realm_data
+      changed_when: kvm_host_realm_data.rc == 0
 
     - name: "Determine if the system belongs to our realm"
       when: realm_data.stdout != ""
       ansible.builtin.assert:
         that:
-          - "_global_domain_name in realm_data.stdout_lines[0]"
-          - "(_global_domain_name | upper) in realm_data.stdout_lines[2]"
-          - "'ipa' in realm_data.stdout_lines[5]"
+          - "_global_domain_name in kvm_host_realm_data.stdout_lines[0]"
+          - "(_global_domain_name | upper) in kvm_host_realm_data.stdout_lines[2]"
+          - "'ipa' in kvm_host_realm_data.stdout_lines[5]"
       # Currently, we will fail here if the hypervisor is not part of our realm
       # TODO: implement a flag that allows us to force unregister the hypervisor
       # and ensure that kvm_idm_registered is false so that we re-register to the
@@ -33,16 +33,16 @@
 
     - name: "The client is in our realm"
       when:
-        - realm_data.stdout != ""
+        - kvm_host_realm_data.stdout != ""
       ansible.builtin.set_fact:
-        kvm_idm_registered: true
+        kvm_host_idm_registered: true
 
     - name: "Log realm data"
       ansible.builtin.debug:
-        var: realm_data
+        var: kvm_host_realm_data
 
 - name: "Ensure the client configuration"
-  when: not kvm_idm_registered
+  when: not kvm_host_idm_registered
   ansible.builtin.include_role:
     name: "redhat.rhel_idm.ipaclient"
 

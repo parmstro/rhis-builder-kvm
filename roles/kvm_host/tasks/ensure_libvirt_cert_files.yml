@@ -61,16 +61,16 @@
 
 - name: "Validate the libvirt pki configuration"
   ansible.builtin.command: "virt-pki-validate"
-  register: vpv_result
-  changed_when: vpv_result.rc == 0
+  register: kvm_host_vpv_result
+  changed_when: kvm_host_vpv_result.rc == 0
 
 - name: "Validation output"
   ansible.builtin.debug:
-    var: vpv_result.stdout
+    var: kvm_host_vpv_result.stdout
 
 - name: "Assertion"
   ansible.builtin.assert:
-    that: not "FAILED" in vpv_result.stdout
+    that: not "FAILED" in kvm_host_vpv_result.stdout
     fail_msg: "One or more configuration items failed checks"
 
 ...

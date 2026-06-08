@@ -1,0 +1,22 @@
+---
+
+# Test playbook for kvm_pools role
+- name: "Test kvm_pools"
+  hosts: localhost
+  connection: local
+  gather_facts: true
+  become: true
+
+  tasks:
+    - name: "Load the vault variables"
+      when: vault_path is defined
+      ansible.builtin.include_vars:
+        file: "{{ vault_path }}"
+
+    - name: "Load the define.yml test variables"
+      ansible.builtin.include_vars:
+        file: "define.yml"
+
+    - name: "Apply role kvm_pools"
+      ansible.builtin.include_role:
+        name: "kvm_pools"
