@@ -1,0 +1,32 @@
+---
+
+# This role configures iSCSI shared storage with LVM locking for KVM live migration
+# It replaces the deprecated GFS2 approach with the modern lvmlockd + sanlock solution
+
+- name: "Install iSCSI and LVM locking packages"
+  ansible.builtin.include_tasks: "ensure_iscsi_packages.yml"
+
+- name: "Configure iSCSI initiator"
+  ansible.builtin.include_tasks: "ensure_iscsi_initiator.yml"
+
+- name: "Discover and connect to iSCSI target"
+  ansible.builtin.include_tasks: "ensure_iscsi_connection.yml"
+
+- name: "Enable and start sanlock service"
+  ansible.builtin.include_tasks: "ensure_sanlock.yml"
+
+- name: "Configure shared LVM volume group"
+  ansible.builtin.include_tasks: "ensure_lvm_shared_vg.yml"
+
+- name: "Configure libvirt storage pool"
+  ansible.builtin.include_tasks: "ensure_libvirt_storage_pool.yml"
+
+- name: "Setup rsyslog for storage monitoring"
+  when: kvm_iscsi_setup_rsyslog | default(false) | bool
+  ansible.builtin.include_tasks: "setup_rsyslog.yml"
+
+- name: "Validate iSCSI shared storage configuration"
+  when: kvm_iscsi_validate_storage | default(true) | bool
+  ansible.builtin.include_tasks: "validate_iscsi_storage.yml"
+
+...

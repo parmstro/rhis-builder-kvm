@@ -1,0 +1,10 @@
+---
+
+- name: "Install iSCSI initiator and LVM locking packages"
+  ansible.builtin.dnf:
+    name:
+      - iscsi-initiator-utils
+      - lvm2-lockd
+      - sanlock
+    state: present
+  become: true

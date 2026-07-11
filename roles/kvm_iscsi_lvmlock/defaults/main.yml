@@ -1,0 +1,31 @@
+---
+
+# iSCSI target configuration
+iscsi_target_iqn: "iqn.2024-01.ca.example:kvm-storage"
+iscsi_target_ip: "192.168.1.100"
+iscsi_target_port: 3260
+
+# iSCSI authentication (optional - set to empty string to disable)
+iscsi_chap_username: ""
+iscsi_chap_password: ""
+
+# LVM Volume Group configuration
+lvm_vg_name: "vmstore"
+lvm_device: "/dev/sdb"  # This will be the iSCSI disk - update after discovery
+
+# Storage pool configuration for libvirt
+storage_pool_name: "vmstore"
+storage_pool_path: "/dev/{{ lvm_vg_name }}"
+
+# Async task parameters
+kvm_iscsi_async_timeout: 300
+kvm_iscsi_async_delay: 10
+
+# Validation options
+kvm_iscsi_validate_storage: true  # Run validation tests after configuration
+kvm_iscsi_cleanup_test_volume: true  # Remove test volume after validation
+
+# Diagnostics and logging options
+kvm_iscsi_save_diagnostics: true  # Save diagnostic reports to log files
+kvm_iscsi_use_logger: true  # Send diagnostic results to syslog
+kvm_iscsi_setup_rsyslog: false  # Configure rsyslog for structured logging (optional)

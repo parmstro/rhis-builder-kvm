@@ -1,0 +1,58 @@
+---
+# Standalone validation playbook for iSCSI shared storage
+#
+# Usage:
+#   ansible-playbook -i inventory validate_kvm_iscsi_storage.yml
+#
+# This playbook can be run independently to validate that iSCSI shared
+# storage is working correctly across all KVM hosts.
+
+- name: Validate KVM iSCSI Shared Storage Configuration
+  hosts: kvm_hosts
+  become: true
+
+  vars:
+    # These should match your configuration
+    iscsi_target_iqn: "{{ iscsi_target_iqn | default('iqn.2024-01.ca.example:kvm-storage') }}"
+    lvm_vg_name: "{{ lvm_vg_name | default('vmstore') }}"
+    storage_pool_name: "{{ storage_pool_name | default('vmstore') }}"
+    kvm_iscsi_cleanup_test_volume: true
+
+  pre_tasks:
+    - name: Display validation scope
+      ansible.builtin.debug:
+        msg:
+          - "Validating iSCSI shared storage configuration"
+          - "Target IQN: {{ iscsi_target_iqn }}"
+          - "Volume Group: {{ lvm_vg_name }}"
+          - "Storage Pool: {{ storage_pool_name }}"
+          - "Hosts: {{ groups['kvm_hosts'] | join(', ') }}"
+      run_once: true
+
+  tasks:
+    - name: "Include validation tasks"
+      ansible.builtin.include_role:
+        name: kvm_iscsi_lvmlock
+        tasks_from: validate_iscsi_storage
+
+  post_tasks:
+    - name: Display final validation results
+      ansible.builtin.debug:
+        msg:
+          - "=================================================="
+          - "Validation Complete!"
+          - "=================================================="
+          - ""
+          - "All {{ groups['kvm_hosts'] | length }} hosts passed validation:"
+          - "{{ groups['kvm_hosts'] | map('extract', hostvars, 'ansible_hostname') | join(', ') }}"
+          - ""
+          - "The iSCSI shared storage is ready for:"
+          - "  ✓ VM deployment"
+          - "  ✓ Live migration"
+          - "  ✓ Shared volume creation"
+          - ""
+          - "Next steps:"
+          - "  1. Create VMs using the storage pool"
+          - "  2. Test live migration between hosts"
+          - "  3. Set up monitoring for iSCSI sessions and locks"
+      run_once: true

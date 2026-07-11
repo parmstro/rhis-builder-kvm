@@ -1,0 +1,92 @@
+---
+
+# Configure rsyslog for KVM storage health monitoring
+# Sets up structured logging and optional remote forwarding
+
+- name: "Rsyslog: Install rsyslog package"
+  ansible.builtin.dnf:
+    name: rsyslog
+    state: present
+  become: true
+
+- name: "Rsyslog: Deploy KVM storage health configuration"
+  ansible.builtin.template:
+    src: "rsyslog-kvm-storage.conf.j2"
+    dest: "/etc/rsyslog.d/20-kvm-storage-health.conf"
+    owner: root
+    group: root
+    mode: '0644'
+  become: true
+  notify: restart rsyslog
+
+- name: "Rsyslog: Create log directory if needed"
+  ansible.builtin.file:
+    path: "/var/log"
+    state: directory
+    owner: root
+    group: root
+    mode: '0755'
+  become: true
+
+- name: "Rsyslog: Create log files with proper permissions"
+  ansible.builtin.file:
+    path: "{{ item }}"
+    state: touch
+    owner: root
+    group: root
+    mode: '0644'
+    modification_time: preserve
+    access_time: preserve
+  become: true
+  loop:
+    - /var/log/kvm-storage-health.log
+    - /var/log/sanlock.log
+    - /var/log/lvmlockd.log
+    - /var/log/iscsi.log
+
+- name: "Rsyslog: Configure logrotate for KVM storage logs"
+  ansible.builtin.copy:
+    content: |
+      /var/log/kvm-storage-health.log
+      /var/log/kvm-storage-health.json
+      /var/log/sanlock.log
+      /var/log/lvmlockd.log
+      /var/log/iscsi.log
+      {
+          daily
+          rotate 30
+          compress
+          delaycompress
+          missingok
+          notifempty
+          create 0644 root root
+          sharedscripts
+          postrotate
+              /usr/bin/systemctl reload rsyslog > /dev/null 2>&1 || true
+          endscript
+      }
+    dest: "/etc/logrotate.d/kvm-storage-health"
+    owner: root
+    group: root
+    mode: '0644'
+  become: true
+
+- name: "Rsyslog: Ensure rsyslog is enabled and started"
+  ansible.builtin.systemd_service:
+    name: rsyslog
+    enabled: true
+    state: started
+  become: true
+
+- name: "Rsyslog: Display configuration summary"
+  ansible.builtin.debug:
+    msg:
+      - "Rsyslog configured for KVM storage health monitoring"
+      - "Local logs:"
+      - "  - /var/log/kvm-storage-health.log (health checks)"
+      - "  - /var/log/kvm-storage-health.json (JSON format)"
+      - "  - /var/log/sanlock.log (sanlock daemon)"
+      - "  - /var/log/lvmlockd.log (lvmlockd daemon)"
+      - "  - /var/log/iscsi.log (iSCSI messages)"
+      - "Log rotation: 30 days"
+      - "{{ 'Remote forwarding to: ' + kvm_iscsi_rsyslog_server if kvm_iscsi_rsyslog_server is defined and kvm_iscsi_rsyslog_server | length > 0 else 'Remote forwarding: Not configured' }}"

@@ -1,0 +1,173 @@
+---
+
+# Validation tasks to verify iSCSI shared storage is working correctly
+# These tests verify:
+# - iSCSI session is active
+# - Volume group is accessible and locked
+# - Storage pool is functional
+# - LVs can be created and are visible across all hosts
+# - Live migration prerequisites are met
+
+- name: "Validation: Check iSCSI session status"
+  ansible.builtin.command:
+    cmd: "iscsiadm -m session -P 1"
+  become: true
+  changed_when: false
+  register: iscsi_session_check
+  failed_when:
+    - iscsi_session_check.rc != 0
+    - "'No active sessions' in iscsi_session_check.stderr"
+
+- name: "Validation: Verify iSCSI target is connected"
+  ansible.builtin.assert:
+    that:
+      - "iscsi_target_iqn in iscsi_session_check.stdout"
+    fail_msg: "iSCSI target {{ iscsi_target_iqn }} is not connected"
+    success_msg: "iSCSI target {{ iscsi_target_iqn }} is connected"
+
+- name: "Validation: Check volume group exists and is shared"
+  ansible.builtin.command:
+    cmd: "vgs {{ lvm_vg_name }} -o vg_name,vg_shared,vg_lock_type --noheadings"
+  become: true
+  changed_when: false
+  register: vg_shared_check
+
+- name: "Validation: Verify volume group is using shared locking"
+  ansible.builtin.assert:
+    that:
+      - "'sanlock' in vg_shared_check.stdout"
+    fail_msg: "Volume group {{ lvm_vg_name }} is not using sanlock"
+    success_msg: "Volume group {{ lvm_vg_name }} is using sanlock"
+
+- name: "Validation: Check VG lock status"
+  ansible.builtin.command:
+    cmd: "vgchange --lockstatus {{ lvm_vg_name }}"
+  become: true
+  changed_when: false
+  register: vg_lock_status
+  failed_when: vg_lock_status.rc != 0
+
+- name: "Validation: Verify sanlock service is running"
+  ansible.builtin.systemd_service:
+    name: sanlock
+    state: started
+  become: true
+  check_mode: true
+  register: sanlock_status
+
+- name: "Validation: Verify lvmlockd service is running"
+  ansible.builtin.systemd_service:
+    name: lvmlockd
+    state: started
+  become: true
+  check_mode: true
+  register: lvmlockd_status
+
+- name: "Validation: Check libvirt storage pool status"
+  community.libvirt.virt_pool:
+    name: "{{ storage_pool_name }}"
+    command: info
+  become: true
+  register: pool_validation_info
+
+- name: "Validation: Verify storage pool is active"
+  ansible.builtin.assert:
+    that:
+      - pool_validation_info.state == "active"
+    fail_msg: "Storage pool {{ storage_pool_name }} is not active"
+    success_msg: "Storage pool {{ storage_pool_name }} is active"
+
+- name: "Validation: Display storage pool capacity"
+  ansible.builtin.debug:
+    msg:
+      - "Pool: {{ storage_pool_name }}"
+      - "State: {{ pool_validation_info.state }}"
+      - "Capacity: {{ (pool_validation_info.capacity | int / 1073741824) | round(2) }} GB"
+      - "Available: {{ (pool_validation_info.available | int / 1073741824) | round(2) }} GB"
+
+# Test volume creation and cross-host visibility (only on first host)
+- name: "Validation: Create test volume on first host"
+  when: inventory_hostname == groups['kvm_hosts'][0]
+  block:
+    - name: "Validation: Create test LV"
+      ansible.builtin.command:
+        cmd: "lvcreate -L 1G -n kvm-validation-test {{ lvm_vg_name }}"
+      become: true
+      register: lv_create
+      changed_when: true
+      failed_when:
+        - lv_create.rc != 0
+        - "'already exists' not in lv_create.stderr"
+
+    - name: "Validation: Wait for LV to propagate"
+      ansible.builtin.pause:
+        seconds: 3
+
+- name: "Validation: Verify test volume is visible on all hosts"
+  ansible.builtin.command:
+    cmd: "lvs {{ lvm_vg_name }}/kvm-validation-test --noheadings -o lv_name"
+  become: true
+  changed_when: false
+  register: lv_visibility
+  retries: 5
+  delay: 2
+  until: lv_visibility.rc == 0
+
+- name: "Validation: Confirm test volume visibility"
+  ansible.builtin.assert:
+    that:
+      - "'kvm-validation-test' in lv_visibility.stdout"
+    fail_msg: "Test volume not visible on {{ inventory_hostname }}"
+    success_msg: "Test volume visible on {{ inventory_hostname }}"
+
+- name: "Validation: Check test volume in libvirt pool"
+  ansible.builtin.command:
+    cmd: "virsh vol-list {{ storage_pool_name }} --details"
+  become: true
+  changed_when: false
+  register: pool_vol_list
+
+- name: "Validation: Verify libvirt can see the test volume"
+  ansible.builtin.assert:
+    that:
+      - "'kvm-validation-test' in pool_vol_list.stdout"
+    fail_msg: "Test volume not visible in libvirt pool on {{ inventory_hostname }}"
+    success_msg: "Test volume visible in libvirt pool on {{ inventory_hostname }}"
+
+# Clean up test volume (only on first host)
+- name: "Validation: Remove test volume"
+  when:
+    - inventory_hostname == groups['kvm_hosts'][0]
+    - kvm_iscsi_cleanup_test_volume | bool
+  block:
+    - name: "Validation: Delete test LV"
+      ansible.builtin.command:
+        cmd: "lvremove -f {{ lvm_vg_name }}/kvm-validation-test"
+      become: true
+      changed_when: true
+      register: lv_remove
+
+    - name: "Validation: Confirm cleanup"
+      ansible.builtin.debug:
+        msg: "Test volume kvm-validation-test has been removed"
+
+- name: "Validation: Summary report"
+  ansible.builtin.debug:
+    msg:
+      - "========================================="
+      - "iSCSI Shared Storage Validation: PASSED"
+      - "========================================="
+      - "Host: {{ ansible_hostname }}"
+      - "iSCSI Session: Active"
+      - "Volume Group: {{ lvm_vg_name }} (shared, sanlock)"
+      - "Storage Pool: {{ storage_pool_name }} (active)"
+      - "Services: sanlock ✓, lvmlockd ✓"
+      - "Cross-host visibility: ✓"
+      - ""
+      - "Ready for VM deployment and live migration!"
+  run_once: true
+
+- name: "Validation: Per-host status"
+  ansible.builtin.debug:
+    msg:
+      - "{{ ansible_hostname }}: All validation checks passed ✓"

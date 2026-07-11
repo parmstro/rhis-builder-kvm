@@ -1,0 +1,68 @@
+# rsyslog configuration for KVM storage health monitoring
+# Installed by kvm_iscsi_lvmlock role
+# Location: /etc/rsyslog.d/20-kvm-storage-health.conf
+
+# Capture all kvm-storage-health messages
+if $programname == 'kvm-storage-health' then {
+    # Write to dedicated log file
+    action(type="omfile" file="/var/log/kvm-storage-health.log")
+
+    # Forward to remote syslog server if configured
+{% if kvm_iscsi_rsyslog_server is defined and kvm_iscsi_rsyslog_server | length > 0 %}
+    action(type="omfwd"
+           target="{{ kvm_iscsi_rsyslog_server }}"
+           port="{{ kvm_iscsi_rsyslog_port | default(514) }}"
+           protocol="{{ kvm_iscsi_rsyslog_protocol | default('tcp') }}")
+{% endif %}
+
+    # Stop processing (don't write to other logs)
+    stop
+}
+
+# Capture sanlock messages
+if $programname == 'sanlock' then {
+    action(type="omfile" file="/var/log/sanlock.log")
+{% if kvm_iscsi_rsyslog_server is defined and kvm_iscsi_rsyslog_server | length > 0 %}
+    action(type="omfwd"
+           target="{{ kvm_iscsi_rsyslog_server }}"
+           port="{{ kvm_iscsi_rsyslog_port | default(514) }}"
+           protocol="{{ kvm_iscsi_rsyslog_protocol | default('tcp') }}")
+{% endif %}
+}
+
+# Capture lvmlockd messages
+if $programname == 'lvmlockd' then {
+    action(type="omfile" file="/var/log/lvmlockd.log")
+{% if kvm_iscsi_rsyslog_server is defined and kvm_iscsi_rsyslog_server | length > 0 %}
+    action(type="omfwd"
+           target="{{ kvm_iscsi_rsyslog_server }}"
+           port="{{ kvm_iscsi_rsyslog_port | default(514) }}"
+           protocol="{{ kvm_iscsi_rsyslog_protocol | default('tcp') }}")
+{% endif %}
+}
+
+# Capture iSCSI-related kernel messages
+if $msg contains 'iscsi' or $msg contains 'scsi' then {
+    action(type="omfile" file="/var/log/iscsi.log")
+{% if kvm_iscsi_rsyslog_server is defined and kvm_iscsi_rsyslog_server | length > 0 %}
+    action(type="omfwd"
+           target="{{ kvm_iscsi_rsyslog_server }}"
+           port="{{ kvm_iscsi_rsyslog_port | default(514) }}"
+           protocol="{{ kvm_iscsi_rsyslog_protocol | default('tcp') }}")
+{% endif %}
+}
+
+# Critical storage health failures
+if $programname == 'kvm-storage-health' and $msg contains 'status=critical' then {
+    # Alert to console and wall
+    action(type="omusrmsg" Users="*")
+{% if kvm_iscsi_rsyslog_email is defined and kvm_iscsi_rsyslog_email | length > 0 %}
+    # Email notification (requires omprog or ommail module)
+    action(type="ommail"
+           server="{{ kvm_iscsi_smtp_server | default('localhost') }}"
+           port="{{ kvm_iscsi_smtp_port | default(25) }}"
+           mailfrom="kvm-storage@{{ ansible_domain }}"
+           mailto="{{ kvm_iscsi_rsyslog_email }}"
+           subject.text="CRITICAL: KVM Storage Health Issue on {{ ansible_hostname }}")
+{% endif %}
+}

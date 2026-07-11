@@ -1,0 +1,57 @@
+---
+# Example variables for kvm_iscsi_lvmlock role
+#
+# Copy this file to your inventory group_vars or host_vars and customize
+
+# iSCSI Target Configuration
+# ---------------------------
+
+# IQN of your iSCSI target (check your NAS/SAN configuration)
+iscsi_target_iqn: "iqn.2024-01.ca.parmstrong:kvm-storage"
+
+# IP address of your iSCSI target
+iscsi_target_ip: "192.168.252.100"
+
+# iSCSI port (default is 3260)
+iscsi_target_port: 3260
+
+# Optional: CHAP Authentication
+# Leave empty to disable CHAP authentication
+iscsi_chap_username: ""
+iscsi_chap_password: ""
+
+# For CHAP enabled:
+# iscsi_chap_username: "kvm-cluster-user"
+# iscsi_chap_password: "{{ vault_iscsi_chap_password }}"
+
+
+# LVM Configuration
+# -----------------
+
+# Device path for the iSCSI LUN
+# IMPORTANT: This may vary - check with 'lsblk' after iSCSI discovery
+# Common paths: /dev/sdb, /dev/sdc, /dev/disk/by-path/...
+lvm_device: "/dev/sdb"
+
+# Name of the shared volume group
+lvm_vg_name: "vmstore"
+
+
+# Libvirt Storage Pool
+# --------------------
+
+# Name of the libvirt storage pool
+storage_pool_name: "vmstore"
+
+# Path to the storage pool (typically /dev/VG_NAME)
+storage_pool_path: "/dev/{{ lvm_vg_name }}"
+
+
+# Performance Tuning (Optional)
+# ------------------------------
+
+# Timeout for async operations (seconds)
+kvm_iscsi_async_timeout: 300
+
+# Delay between async operation checks (seconds)
+kvm_iscsi_async_delay: 10

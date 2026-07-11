@@ -1,0 +1,77 @@
+---
+
+- name: "Check if volume group already exists"
+  ansible.builtin.command:
+    cmd: "vgs {{ lvm_vg_name }}"
+  become: true
+  register: vg_check
+  changed_when: false
+  failed_when: false
+
+- name: "Create shared volume group on first host"
+  when:
+    - vg_check.rc != 0
+    - inventory_hostname == groups['kvm_hosts'][0]
+  block:
+    - name: "Create physical volume"
+      community.general.lvg:
+        vg: "{{ lvm_vg_name }}"
+        pvs: "{{ lvm_device }}"
+        vg_options: "--shared"
+        state: present
+      become: true
+
+    - name: "Start the volume group lock"
+      ansible.builtin.command:
+        cmd: "vgchange --lock-start {{ lvm_vg_name }}"
+      become: true
+      changed_when: true
+
+- name: "Import shared volume group on other hosts"
+  when:
+    - vg_check.rc != 0
+    - inventory_hostname != groups['kvm_hosts'][0]
+  block:
+    - name: "Wait for VG to be created on first host"
+      ansible.builtin.pause:
+        seconds: 10
+
+    - name: "Scan for volume groups"
+      ansible.builtin.command:
+        cmd: "vgscan --cache"
+      become: true
+      changed_when: false
+
+    - name: "Import the shared volume group"
+      ansible.builtin.command:
+        cmd: "vgimport --shared {{ lvm_vg_name }}"
+      become: true
+      register: vg_import
+      changed_when: "'successfully imported' in vg_import.stdout"
+      failed_when:
+        - vg_import.rc != 0
+        - "'already exists' not in vg_import.stderr"
+
+    - name: "Start the volume group lock"
+      ansible.builtin.command:
+        cmd: "vgchange --lock-start {{ lvm_vg_name }}"
+      become: true
+      changed_when: true
+
+- name: "Enable automatic VG activation"
+  ansible.builtin.command:
+    cmd: "vgchange --setautoactivation y {{ lvm_vg_name }}"
+  become: true
+  changed_when: true
+  when: vg_check.rc != 0
+
+- name: "Verify volume group status"
+  ansible.builtin.command:
+    cmd: "vgs {{ lvm_vg_name }}"
+  become: true
+  changed_when: false
+  register: vg_status
+
+- name: "Display volume group status"
+  ansible.builtin.debug:
+    var: vg_status.stdout_lines

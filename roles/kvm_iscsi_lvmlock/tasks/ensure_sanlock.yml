@@ -1,0 +1,24 @@
+---
+
+- name: "Enable and start sanlock service"
+  ansible.builtin.systemd_service:
+    name: sanlock
+    enabled: true
+    state: started
+  become: true
+
+- name: "Enable and start lvmlockd service"
+  ansible.builtin.systemd_service:
+    name: lvmlockd
+    enabled: true
+    state: started
+  become: true
+
+- name: "Configure LVM to use lvmlockd"
+  ansible.builtin.lineinfile:
+    path: /etc/lvm/lvm.conf
+    regexp: '^\s*use_lvmlockd\s*='
+    line: '    use_lvmlockd = 1'
+    insertafter: '^global {'
+  become: true
+  notify: restart lvmlockd

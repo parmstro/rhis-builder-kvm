@@ -1,0 +1,46 @@
+---
+
+- name: "Discover iSCSI targets"
+  ansible.builtin.command:
+    cmd: "iscsiadm -m discovery -t st -p {{ iscsi_target_ip }}:{{ iscsi_target_port }}"
+  become: true
+  changed_when: false
+  register: iscsi_discovery
+
+- name: "Display discovered targets"
+  ansible.builtin.debug:
+    var: iscsi_discovery.stdout_lines
+
+- name: "Login to iSCSI target"
+  ansible.builtin.command:
+    cmd: "iscsiadm -m node --targetname {{ iscsi_target_iqn }} --login"
+  become: true
+  register: iscsi_login
+  changed_when: "'successful' in iscsi_login.stdout"
+  failed_when:
+    - iscsi_login.rc != 0
+    - "'already present' not in iscsi_login.stderr"
+
+- name: "Configure automatic login on boot"
+  ansible.builtin.command:
+    cmd: "iscsiadm -m node --targetname {{ iscsi_target_iqn }} --op update -n node.startup -v automatic"
+  become: true
+  changed_when: true
+
+- name: "Wait for iSCSI device to appear"
+  ansible.builtin.wait_for:
+    path: "{{ lvm_device }}"
+    state: present
+    timeout: 30
+  become: true
+
+- name: "Get iSCSI device information"
+  ansible.builtin.command:
+    cmd: "lsblk {{ lvm_device }}"
+  become: true
+  changed_when: false
+  register: iscsi_device_info
+
+- name: "Display iSCSI device information"
+  ansible.builtin.debug:
+    var: iscsi_device_info.stdout_lines

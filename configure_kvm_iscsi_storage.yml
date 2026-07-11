@@ -1,0 +1,69 @@
+---
+# Configure iSCSI shared storage with LVM locking for KVM live migration
+#
+# Usage:
+#   ansible-playbook -i inventory configure_kvm_iscsi_storage.yml
+#
+# This playbook should be run after the KVM hosts have been provisioned and
+# the kvm_host role has been applied to configure TLS certificates.
+
+- name: Configure KVM cluster with iSCSI shared storage
+  hosts: kvm_hosts
+  become: true
+
+  vars:
+    # iSCSI target configuration - update these for your environment
+    iscsi_target_iqn: "iqn.2024-01.ca.example:kvm-storage"
+    iscsi_target_ip: "192.168.252.100"
+    iscsi_target_port: 3260
+
+    # Optional: CHAP authentication
+    # iscsi_chap_username: "kvm-cluster"
+    # iscsi_chap_password: "changeme"
+
+    # LVM configuration
+    # IMPORTANT: Update lvm_device after running iSCSI discovery to find actual device
+    lvm_device: "/dev/sdb"
+    lvm_vg_name: "vmstore"
+
+    # Libvirt storage pool
+    storage_pool_name: "vmstore"
+
+  pre_tasks:
+    - name: Verify kvm_hosts group exists and has multiple hosts
+      ansible.builtin.assert:
+        that:
+          - groups['kvm_hosts'] is defined
+          - groups['kvm_hosts'] | length > 1
+        fail_msg: "This playbook requires multiple hosts in the 'kvm_hosts' group for cluster setup"
+        success_msg: "Found {{ groups['kvm_hosts'] | length }} KVM hosts for cluster configuration"
+      run_once: true
+
+    - name: Display configuration summary
+      ansible.builtin.debug:
+        msg:
+          - "Configuring iSCSI shared storage for KVM cluster"
+          - "Target: {{ iscsi_target_iqn }}"
+          - "Target IP: {{ iscsi_target_ip }}"
+          - "Volume Group: {{ lvm_vg_name }}"
+          - "Storage Pool: {{ storage_pool_name }}"
+          - "Cluster Hosts: {{ groups['kvm_hosts'] | join(', ') }}"
+      run_once: true
+
+  roles:
+    - kvm_iscsi_lvmlock
+
+  post_tasks:
+    - name: Display next steps
+      ansible.builtin.debug:
+        msg:
+          - "iSCSI shared storage configuration complete!"
+          - ""
+          - "Next steps:"
+          - "1. Verify storage pool: virsh pool-list --all"
+          - "2. Check volume group: vgs {{ lvm_vg_name }} -o +locktype"
+          - "3. Create test VM: virsh vol-create-as {{ storage_pool_name }} test-disk 10G"
+          - "4. Test live migration between hosts"
+          - ""
+          - "For troubleshooting, see: roles/kvm_iscsi_lvmlock/README.md"
+      run_once: true

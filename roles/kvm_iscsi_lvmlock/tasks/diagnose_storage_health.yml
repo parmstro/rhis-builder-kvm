@@ -1,0 +1,349 @@
+---
+
+# Comprehensive storage health diagnostics
+# Detects failure states in iSCSI, sanlock, lvmlockd, and VG locking
+# Sets facts about health status for use in remediation
+
+- name: "Diagnostics: Initialize health check variables"
+  ansible.builtin.set_fact:
+    storage_health:
+      overall_status: "unknown"
+      iscsi_session_ok: false
+      iscsi_device_present: false
+      sanlock_running: false
+      lvmlockd_running: false
+      vg_present: false
+      vg_locked: false
+      vg_lock_type_correct: false
+      pool_active: false
+      issues_found: []
+      remediation_level: 0
+
+- name: "Diagnostics: Check iSCSI session status"
+  ansible.builtin.command:
+    cmd: "iscsiadm -m session"
+  become: true
+  register: iscsi_session_status
+  changed_when: false
+  failed_when: false
+
+- name: "Diagnostics: Evaluate iSCSI session health"
+  ansible.builtin.set_fact:
+    storage_health: "{{ storage_health | combine({'iscsi_session_ok': iscsi_target_iqn in iscsi_session_status.stdout}) }}"
+  when: iscsi_session_status.rc == 0
+
+- name: "Diagnostics: Record iSCSI session failure"
+  when:
+    - iscsi_session_status.rc != 0 or not storage_health.iscsi_session_ok
+  ansible.builtin.set_fact:
+    storage_health: "{{ storage_health | combine({
+      'issues_found': storage_health.issues_found + ['iscsi_session_failed'],
+      'remediation_level': [storage_health.remediation_level, 1] | max
+    }) }}"
+
+- name: "Diagnostics: Check iSCSI device presence"
+  ansible.builtin.stat:
+    path: "{{ lvm_device }}"
+  become: true
+  register: iscsi_device_check
+
+- name: "Diagnostics: Evaluate iSCSI device health"
+  ansible.builtin.set_fact:
+    storage_health: "{{ storage_health | combine({'iscsi_device_present': iscsi_device_check.stat.exists}) }}"
+
+- name: "Diagnostics: Record iSCSI device missing"
+  when: not iscsi_device_check.stat.exists
+  ansible.builtin.set_fact:
+    storage_health: "{{ storage_health | combine({
+      'issues_found': storage_health.issues_found + ['iscsi_device_missing'],
+      'remediation_level': [storage_health.remediation_level, 2] | max
+    }) }}"
+
+- name: "Diagnostics: Check sanlock service status"
+  ansible.builtin.systemd_service:
+    name: sanlock
+  become: true
+  register: sanlock_status
+  check_mode: true
+
+- name: "Diagnostics: Evaluate sanlock health"
+  ansible.builtin.set_fact:
+    storage_health: "{{ storage_health | combine({'sanlock_running': sanlock_status.status.ActiveState == 'active'}) }}"
+
+- name: "Diagnostics: Record sanlock failure"
+  when: sanlock_status.status.ActiveState != 'active'
+  ansible.builtin.set_fact:
+    storage_health: "{{ storage_health | combine({
+      'issues_found': storage_health.issues_found + ['sanlock_not_running'],
+      'remediation_level': [storage_health.remediation_level, 1] | max
+    }) }}"
+
+- name: "Diagnostics: Check lvmlockd service status"
+  ansible.builtin.systemd_service:
+    name: lvmlockd
+  become: true
+  register: lvmlockd_status
+  check_mode: true
+
+- name: "Diagnostics: Evaluate lvmlockd health"
+  ansible.builtin.set_fact:
+    storage_health: "{{ storage_health | combine({'lvmlockd_running': lvmlockd_status.status.ActiveState == 'active'}) }}"
+
+- name: "Diagnostics: Record lvmlockd failure"
+  when: lvmlockd_status.status.ActiveState != 'active'
+  ansible.builtin.set_fact:
+    storage_health: "{{ storage_health | combine({
+      'issues_found': storage_health.issues_found + ['lvmlockd_not_running'],
+      'remediation_level': [storage_health.remediation_level, 1] | max
+    }) }}"
+
+- name: "Diagnostics: Check volume group existence"
+  ansible.builtin.command:
+    cmd: "vgs {{ lvm_vg_name }} --noheadings -o vg_name"
+  become: true
+  register: vg_check
+  changed_when: false
+  failed_when: false
+
+- name: "Diagnostics: Evaluate VG presence"
+  ansible.builtin.set_fact:
+    storage_health: "{{ storage_health | combine({'vg_present': vg_check.rc == 0}) }}"
+
+- name: "Diagnostics: Record VG missing"
+  when: vg_check.rc != 0
+  ansible.builtin.set_fact:
+    storage_health: "{{ storage_health | combine({
+      'issues_found': storage_health.issues_found + ['vg_not_found'],
+      'remediation_level': [storage_health.remediation_level, 3] | max
+    }) }}"
+
+- name: "Diagnostics: Check VG lock type"
+  when: vg_check.rc == 0
+  block:
+    - name: "Diagnostics: Get VG lock information"
+      ansible.builtin.command:
+        cmd: "vgs {{ lvm_vg_name }} --noheadings -o locktype,vg_shared"
+      become: true
+      register: vg_lock_info
+      changed_when: false
+
+    - name: "Diagnostics: Evaluate VG lock type"
+      ansible.builtin.set_fact:
+        storage_health: "{{ storage_health | combine({
+          'vg_lock_type_correct': 'sanlock' in vg_lock_info.stdout and 'shared' in vg_lock_info.stdout
+        }) }}"
+
+    - name: "Diagnostics: Record VG lock type mismatch"
+      when: not ('sanlock' in vg_lock_info.stdout and 'shared' in vg_lock_info.stdout)
+      ansible.builtin.set_fact:
+        storage_health: "{{ storage_health | combine({
+          'issues_found': storage_health.issues_found + ['vg_lock_type_incorrect'],
+          'remediation_level': [storage_health.remediation_level, 3] | max
+        }) }}"
+
+- name: "Diagnostics: Check VG lock status"
+  when:
+    - vg_check.rc == 0
+    - storage_health.vg_lock_type_correct
+  block:
+    - name: "Diagnostics: Get VG lock status"
+      ansible.builtin.command:
+        cmd: "vgchange --lockstatus {{ lvm_vg_name }}"
+      become: true
+      register: vg_lock_status
+      changed_when: false
+      failed_when: false
+
+    - name: "Diagnostics: Evaluate VG lock status"
+      ansible.builtin.set_fact:
+        storage_health: "{{ storage_health | combine({'vg_locked': vg_lock_status.rc == 0}) }}"
+
+    - name: "Diagnostics: Record VG not locked"
+      when: vg_lock_status.rc != 0
+      ansible.builtin.set_fact:
+        storage_health: "{{ storage_health | combine({
+          'issues_found': storage_health.issues_found + ['vg_not_locked'],
+          'remediation_level': [storage_health.remediation_level, 2] | max
+        }) }}"
+
+- name: "Diagnostics: Check libvirt storage pool"
+  when: storage_health.vg_present
+  block:
+    - name: "Diagnostics: Get pool status"
+      community.libvirt.virt_pool:
+        name: "{{ storage_pool_name }}"
+        command: info
+      become: true
+      register: pool_status
+      failed_when: false
+
+    - name: "Diagnostics: Evaluate pool health"
+      when: pool_status is defined and pool_status.state is defined
+      ansible.builtin.set_fact:
+        storage_health: "{{ storage_health | combine({'pool_active': pool_status.state == 'active'}) }}"
+
+    - name: "Diagnostics: Record pool inactive"
+      when: pool_status is defined and pool_status.state is defined and pool_status.state != 'active'
+      ansible.builtin.set_fact:
+        storage_health: "{{ storage_health | combine({
+          'issues_found': storage_health.issues_found + ['pool_not_active'],
+          'remediation_level': [storage_health.remediation_level, 1] | max
+        }) }}"
+
+- name: "Diagnostics: Check for active VMs using storage"
+  ansible.builtin.command:
+    cmd: "virsh list --all --name"
+  become: true
+  register: vm_list
+  changed_when: false
+
+- name: "Diagnostics: Identify VMs on shared storage"
+  ansible.builtin.command:
+    cmd: "virsh domblklist {{ item }} --details"
+  become: true
+  loop: "{{ vm_list.stdout_lines }}"
+  when:
+    - vm_list.stdout_lines is defined
+    - vm_list.stdout_lines | length > 0
+    - item | length > 0
+  register: vm_disks
+  changed_when: false
+  failed_when: false
+
+- name: "Diagnostics: Count VMs on shared storage"
+  ansible.builtin.set_fact:
+    storage_health: "{{ storage_health | combine({
+      'vms_on_storage': vm_disks.results | selectattr('stdout', 'defined') | selectattr('stdout', 'search', lvm_vg_name) | list | length
+    }) }}"
+
+- name: "Diagnostics: Check for dual LV activation across cluster"
+  when:
+    - groups['kvm_hosts'] is defined
+    - groups['kvm_hosts'] | length > 1
+    - storage_health.vg_present
+  block:
+    - name: "Diagnostics: Get active LVs on this host"
+      ansible.builtin.command:
+        cmd: "lvs {{ lvm_vg_name }} --noheadings -o lv_name,lv_active"
+      become: true
+      register: local_lvs
+      changed_when: false
+
+    - name: "Diagnostics: Store local active LVs"
+      ansible.builtin.set_fact:
+        local_active_lvs: "{{ local_lvs.stdout_lines | select('search', 'active') | map('split') | map('first') | list }}"
+
+- name: "Diagnostics: Determine overall health status"
+  ansible.builtin.set_fact:
+    storage_health: "{{ storage_health | combine({
+      'overall_status': 'healthy' if (storage_health.issues_found | length == 0) else ('degraded' if storage_health.remediation_level <= 2 else 'critical')
+    }) }}"
+
+- name: "Diagnostics: Display health summary"
+  ansible.builtin.debug:
+    msg:
+      - "========================================"
+      - "Storage Health Check: {{ ansible_hostname }}"
+      - "========================================"
+      - "Overall Status: {{ storage_health.overall_status | upper }}"
+      - "iSCSI Session: {{ 'OK' if storage_health.iscsi_session_ok else 'FAILED' }}"
+      - "iSCSI Device: {{ 'Present' if storage_health.iscsi_device_present else 'MISSING' }}"
+      - "Sanlock Service: {{ 'Running' if storage_health.sanlock_running else 'STOPPED' }}"
+      - "lvmlockd Service: {{ 'Running' if storage_health.lvmlockd_running else 'STOPPED' }}"
+      - "Volume Group: {{ 'Present' if storage_health.vg_present else 'MISSING' }}"
+      - "VG Lock Type: {{ 'Correct (sanlock)' if storage_health.vg_lock_type_correct else 'INCORRECT' }}"
+      - "VG Locked: {{ 'Yes' if storage_health.vg_locked else 'NO' }}"
+      - "Storage Pool: {{ 'Active' if storage_health.pool_active else 'INACTIVE' }}"
+      - "VMs on Storage: {{ storage_health.vms_on_storage | default(0) }}"
+      - ""
+      - "Issues Found: {{ storage_health.issues_found | length }}"
+      - "{{ storage_health.issues_found }}"
+      - ""
+      - "Remediation Level: {{ storage_health.remediation_level }}"
+      - "  0 = No issues"
+      - "  1 = Safe auto-remediation"
+      - "  2 = Semi-automatic (VM stop may be needed)"
+      - "  3 = Manual intervention required"
+
+- name: "Diagnostics: Determine syslog severity level"
+  ansible.builtin.set_fact:
+    syslog_severity: >-
+      {{
+        'crit' if storage_health.overall_status == 'critical'
+        else 'warning' if storage_health.overall_status == 'degraded'
+        else 'info'
+      }}
+    syslog_priority: >-
+      {{
+        2 if storage_health.overall_status == 'critical'
+        else 4 if storage_health.overall_status == 'degraded'
+        else 6
+      }}
+
+- name: "Diagnostics: Create structured log entry"
+  ansible.builtin.set_fact:
+    storage_health_log:
+      timestamp: "{{ ansible_date_time.iso8601 }}"
+      hostname: "{{ ansible_fqdn }}"
+      facility: "local0"
+      severity: "{{ syslog_severity }}"
+      priority: "{{ syslog_priority }}"
+      application: "kvm-storage-health"
+      message_type: "health_check"
+      overall_status: "{{ storage_health.overall_status }}"
+      remediation_level: "{{ storage_health.remediation_level }}"
+      components:
+        iscsi_session: "{{ storage_health.iscsi_session_ok }}"
+        iscsi_device: "{{ storage_health.iscsi_device_present }}"
+        sanlock: "{{ storage_health.sanlock_running }}"
+        lvmlockd: "{{ storage_health.lvmlockd_running }}"
+        volume_group: "{{ storage_health.vg_present }}"
+        vg_lock_type: "{{ storage_health.vg_lock_type_correct }}"
+        vg_locked: "{{ storage_health.vg_locked }}"
+        storage_pool: "{{ storage_health.pool_active }}"
+      issues: "{{ storage_health.issues_found }}"
+      vms_on_storage: "{{ storage_health.vms_on_storage | default(0) }}"
+      target_iqn: "{{ iscsi_target_iqn }}"
+      volume_group: "{{ lvm_vg_name }}"
+      storage_pool: "{{ storage_pool_name }}"
+
+- name: "Diagnostics: Write JSON log entry"
+  when: kvm_iscsi_save_diagnostics | default(true) | bool
+  ansible.builtin.copy:
+    content: "{{ storage_health_log | to_nice_json }}\n"
+    dest: "/var/log/kvm-storage-health.json"
+    owner: root
+    group: root
+    mode: '0644'
+  become: true
+
+- name: "Diagnostics: Write syslog-compatible log entry"
+  when: kvm_iscsi_save_diagnostics | default(true) | bool
+  ansible.builtin.lineinfile:
+    path: "/var/log/kvm-storage-health.log"
+    line: "{{ ansible_date_time.iso8601 }} {{ ansible_hostname }} kvm-storage-health[{{ ansible_pid }}]: status={{ storage_health.overall_status }} remediation_level={{ storage_health.remediation_level }} issues={{ storage_health.issues_found | length }} components_ok={{ [storage_health.iscsi_session_ok, storage_health.iscsi_device_present, storage_health.sanlock_running, storage_health.lvmlockd_running, storage_health.vg_present, storage_health.vg_locked, storage_health.pool_active] | select | list | length }}/7 vms={{ storage_health.vms_on_storage | default(0) }} details={{ storage_health.issues_found | join(',') | default('none') }}"
+    create: true
+    owner: root
+    group: root
+    mode: '0644'
+  become: true
+
+- name: "Diagnostics: Send to system logger"
+  when:
+    - kvm_iscsi_save_diagnostics | default(true) | bool
+    - kvm_iscsi_use_logger | default(true) | bool
+  ansible.builtin.command:
+    cmd: >
+      logger -t kvm-storage-health -p local0.{{ syslog_severity }}
+      'status={{ storage_health.overall_status }}
+      remediation_level={{ storage_health.remediation_level }}
+      issues={{ storage_health.issues_found | length }}
+      iscsi_ok={{ storage_health.iscsi_session_ok }}
+      sanlock_ok={{ storage_health.sanlock_running }}
+      lvmlockd_ok={{ storage_health.lvmlockd_running }}
+      vg_locked={{ storage_health.vg_locked }}
+      pool_active={{ storage_health.pool_active }}
+      vms={{ storage_health.vms_on_storage | default(0) }}
+      {{ "issues=" + (storage_health.issues_found | join(",")) if storage_health.issues_found | length > 0 else "" }}'
+  become: true
+  changed_when: false

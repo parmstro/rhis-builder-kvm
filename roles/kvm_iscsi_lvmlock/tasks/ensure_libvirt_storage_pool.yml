@@ -1,0 +1,52 @@
+---
+
+- name: "Check if libvirt storage pool exists"
+  community.libvirt.virt_pool:
+    command: info
+    name: "{{ storage_pool_name }}"
+  become: true
+  register: pool_info
+  failed_when: false
+
+- name: "Define libvirt LVM storage pool"
+  when: pool_info.failed | default(false)
+  block:
+    - name: "Define the storage pool"
+      community.libvirt.virt_pool:
+        command: define
+        name: "{{ storage_pool_name }}"
+        xml: |
+          <pool type='logical'>
+            <name>{{ storage_pool_name }}</name>
+            <source>
+              <name>{{ lvm_vg_name }}</name>
+              <format type='lvm2'/>
+            </source>
+            <target>
+              <path>{{ storage_pool_path }}</path>
+            </target>
+          </pool>
+      become: true
+
+- name: "Start the storage pool"
+  community.libvirt.virt_pool:
+    name: "{{ storage_pool_name }}"
+    state: active
+  become: true
+
+- name: "Enable storage pool autostart"
+  community.libvirt.virt_pool:
+    name: "{{ storage_pool_name }}"
+    autostart: true
+  become: true
+
+- name: "Get storage pool information"
+  community.libvirt.virt_pool:
+    command: info
+    name: "{{ storage_pool_name }}"
+  become: true
+  register: final_pool_info
+
+- name: "Display storage pool information"
+  ansible.builtin.debug:
+    var: final_pool_info

@@ -1,0 +1,19 @@
+---
+
+- name: restart iscsid
+  ansible.builtin.systemd_service:
+    name: iscsid
+    state: restarted
+  become: true
+
+- name: restart lvmlockd
+  ansible.builtin.systemd_service:
+    name: lvmlockd
+    state: restarted
+  become: true
+
+- name: restart rsyslog
+  ansible.builtin.systemd_service:
+    name: rsyslog
+    state: restarted
+  become: true

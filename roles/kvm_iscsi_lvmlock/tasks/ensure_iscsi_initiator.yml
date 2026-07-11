@@ -1,0 +1,39 @@
+---
+
+- name: "Set unique iSCSI initiator name"
+  ansible.builtin.template:
+    src: "initiatorname.iscsi.j2"
+    dest: "/etc/iscsi/initiatorname.iscsi"
+    owner: root
+    group: root
+    mode: '0600'
+  become: true
+  notify: restart iscsid
+
+- name: "Configure iSCSI CHAP authentication"
+  when:
+    - iscsi_chap_username is defined
+    - iscsi_chap_username | length > 0
+  block:
+    - name: "Set CHAP authentication in iscsid.conf"
+      ansible.builtin.lineinfile:
+        path: /etc/iscsi/iscsid.conf
+        regexp: "^{{ item.key }}"
+        line: "{{ item.key }} = {{ item.value }}"
+      loop:
+        - { key: "node.session.auth.authmethod", value: "CHAP" }
+        - { key: "node.session.auth.username", value: "{{ iscsi_chap_username }}" }
+        - { key: "node.session.auth.password", value: "{{ iscsi_chap_password }}" }
+      become: true
+      no_log: true
+      notify: restart iscsid
+
+- name: "Enable and start iSCSI service"
+  ansible.builtin.systemd_service:
+    name: "{{ item }}"
+    enabled: true
+    state: started
+  loop:
+    - iscsid
+    - iscsi
+  become: true
